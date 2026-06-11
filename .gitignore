@@ -1,0 +1,35 @@
+# Secretos y datos de runtime — NUNCA en git
+.env
+*.env
+!.env.example
+
+# Estado persistente del agente (vive en Docker Named Volume, no en el repo)
+agent_state/
+agent_state_dev/
+
+# Datos de InfluxDB locales (ídem)
+influxdb_data/
+influxdb_data_dev/
+
+# Logs de Mosquitto
+mosquitto/data/
+mosquitto/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+
+# Certificados y claves
+*.pem
+*.key
+*.crt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,100 @@
+version: "3.8"
+
+# ==============================================================================
+# AIM SCADA — Stack Edge (Store & Forward)
+# Variables de entorno inyectadas por GitHub Actions desde los Secrets.
+# NO hardcodear valores aquí. Usar .env (generado en el workflow).
+# ==============================================================================
+
+services:
+  mosquitto_edge:
+    image: eclipse-mosquitto:2.0
+    container_name: aim_mosquitto_edge
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - edge_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t _health -m ping 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  influxdb_edge:
+    image: influxdb:2.7-alpine
+    container_name: aim_influxdb_edge
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN}
+      - DOCKER_INFLUXDB_INIT_RETENTION=2d
+    ports:
+      - "8087:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - edge_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  edge_agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    image: aim-edge-agent:${AGENT_VERSION:-latest}
+    container_name: aim_edge_agent
+    ports:
+      - "8080:8080"
+    environment:
+      # --- Identidad del sitio (vienen de GitHub Secrets) ---
+      - TENANT_SLUG=${TENANT_SLUG}
+      - SITE_ID=${SITE_ID}
+      - DEVICE_TOKEN=${DEVICE_TOKEN}
+      - CLOUD_API_URL=${CLOUD_API_URL}
+      # --- Servicios locales del edge (siempre iguales, no son secretos) ---
+      - EDGE_MQTT_HOST=aim_mosquitto_edge
+      - EDGE_MQTT_PORT=1883
+      - EDGE_INFLUX_URL=http://aim_influxdb_edge:8086
+      - EDGE_INFLUX_TOKEN=${INFLUX_TOKEN}
+      - EDGE_INFLUX_ORG=${INFLUX_ORG}
+      - EDGE_INFLUX_BUCKET=${INFLUX_BUCKET}
+    volumes:
+      - agent_state:/app/state
+    depends_on:
+      mosquitto_edge:
+        condition: service_healthy
+      influxdb_edge:
+        condition: service_healthy
+    networks:
+      - edge_net
+    restart: unless-stopped
+
+networks:
+  edge_net:
+    name: aim_edge_net
+    driver: bridge
+
+# Named volumes: los datos persisten aunque el stack se baje y se vuelva a subir
+volumes:
+  influxdb_data:
+    name: aim_influxdb_data
+  mosquitto_data:
+    name: aim_mosquitto_data
+  mosquitto_logs:
+    name: aim_mosquitto_logs
+  agent_state:
+    name: aim_agent_state

@@ -1,0 +1,94 @@
+name: 🏭 Deploy Edge Agent
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent/**'
+      - 'docker-compose.yml'
+      - 'mosquitto/**'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Forzar rebuild de la imagen Docker (incluso sin cambios en agent/)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to Edge Node — Minera-Sofia
+    runs-on: self-hosted
+    environment: Minera-Sofia   # ← Nombre exacto del Environment en GitHub
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🔑 Generar archivo .env desde GitHub Secrets
+        run: |
+          cat > .env << 'EOF'
+          TENANT_SLUG=${{ secrets.TENANT_SLUG }}
+          SITE_ID=${{ secrets.SITE_ID }}
+          DEVICE_TOKEN=${{ secrets.DEVICE_TOKEN }}
+          CLOUD_API_URL=${{ secrets.CLOUD_API_URL }}
+          INFLUX_ADMIN_USER=${{ secrets.INFLUX_ADMIN_USER }}
+          INFLUX_ADMIN_PASSWORD=${{ secrets.INFLUX_ADMIN_PASSWORD }}
+          INFLUX_ORG=${{ secrets.INFLUX_ORG }}
+          INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}
+          INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
+          AGENT_VERSION=${{ github.sha }}
+          EOF
+          echo "✅ .env generado (valores ocultos por seguridad)"
+
+      - name: 🐳 Pull de imágenes base (actualizaciones de seguridad)
+        run: docker compose pull mosquitto_edge influxdb_edge
+
+      - name: 🔨 Build del agente
+        run: |
+          # Rebuild si cambió código del agente O si se forzó manualmente
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep "^agent/" || true)
+          if [[ "${{ inputs.force_rebuild }}" == "true" ]] || [[ -n "$CHANGED" ]]; then
+            echo "🔨 Cambios detectados en agent/ (o rebuild forzado) — rebuildeando imagen..."
+            docker compose build --no-cache edge_agent
+          else
+            echo "⏩ Sin cambios en agent/ — build incremental (usa caché)"
+            docker compose build edge_agent
+          fi
+
+      - name: 🚀 Deploy (zero-downtime)
+        run: |
+          docker compose up -d --remove-orphans
+          echo "✅ Stack levantado"
+
+      - name: 🔍 Verificar salud de los servicios (esperar 20s)
+        run: |
+          sleep 20
+          echo "=== Estado de los contenedores ==="
+          docker compose ps
+
+          echo ""
+          echo "=== Health check Agente ==="
+          curl -sf http://localhost:8080/health && echo "✅ Agente OK" || echo "⚠️ Agente no responde (puede seguir iniciando)"
+
+          echo ""
+          echo "=== Health check InfluxDB ==="
+          curl -sf http://localhost:8087/ping && echo "✅ InfluxDB OK" || echo "⚠️ InfluxDB no responde"
+
+      - name: 🧹 Limpiar imágenes Docker antiguas
+        run: docker image prune -f
+
+      - name: 📋 Resumen del deploy
+        if: always()
+        run: |
+          echo "=================================================="
+          echo "  AIM SCADA Edge — Resumen de Deploy"
+          echo "=================================================="
+          echo "  Commit  : ${{ github.sha }}"
+          echo "  Autor   : ${{ github.actor }}"
+          echo "  Rama    : ${{ github.ref_name }}"
+          echo "  Ambiente: Minera-Sofia"
+          echo "  Fecha   : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "=================================================="
+          docker compose ps
