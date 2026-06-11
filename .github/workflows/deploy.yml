@@ -16,11 +16,17 @@ on:
         default: 'false'
         type: boolean
 
+# Usar Git Bash en Windows (viene incluido con Git for Windows)
+# Permite usar comandos bash/unix en un runner Windows 11 sin instalar nada extra
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     name: 🚀 Deploy to Edge Node — Minera-Sofia
     runs-on: self-hosted
-    environment: Minera-Sofia   # ← Nombre exacto del Environment en GitHub
+    environment: Minera-Sofia
 
     steps:
       - name: 📥 Checkout código
@@ -28,18 +34,17 @@ jobs:
 
       - name: 🔑 Generar archivo .env desde GitHub Secrets
         run: |
-          cat > .env << 'EOF'
-          TENANT_SLUG=${{ secrets.TENANT_SLUG }}
-          SITE_ID=${{ secrets.SITE_ID }}
-          DEVICE_TOKEN=${{ secrets.DEVICE_TOKEN }}
-          CLOUD_API_URL=${{ secrets.CLOUD_API_URL }}
-          INFLUX_ADMIN_USER=${{ secrets.INFLUX_ADMIN_USER }}
-          INFLUX_ADMIN_PASSWORD=${{ secrets.INFLUX_ADMIN_PASSWORD }}
-          INFLUX_ORG=${{ secrets.INFLUX_ORG }}
-          INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}
-          INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
-          AGENT_VERSION=${{ github.sha }}
-          EOF
+          # printf es más portable que heredoc en Git Bash / Windows
+          printf 'TENANT_SLUG=%s\n' "${{ secrets.TENANT_SLUG }}" > .env
+          printf 'SITE_ID=%s\n' "${{ secrets.SITE_ID }}" >> .env
+          printf 'DEVICE_TOKEN=%s\n' "${{ secrets.DEVICE_TOKEN }}" >> .env
+          printf 'CLOUD_API_URL=%s\n' "${{ secrets.CLOUD_API_URL }}" >> .env
+          printf 'INFLUX_ADMIN_USER=%s\n' "${{ secrets.INFLUX_ADMIN_USER }}" >> .env
+          printf 'INFLUX_ADMIN_PASSWORD=%s\n' "${{ secrets.INFLUX_ADMIN_PASSWORD }}" >> .env
+          printf 'INFLUX_ORG=%s\n' "${{ secrets.INFLUX_ORG }}" >> .env
+          printf 'INFLUX_BUCKET=%s\n' "${{ secrets.INFLUX_BUCKET }}" >> .env
+          printf 'INFLUX_TOKEN=%s\n' "${{ secrets.INFLUX_TOKEN }}" >> .env
+          printf 'AGENT_VERSION=%s\n' "${{ github.sha }}" >> .env
           echo "✅ .env generado (valores ocultos por seguridad)"
 
       - name: 🐳 Pull de imágenes base (actualizaciones de seguridad)
@@ -47,10 +52,9 @@ jobs:
 
       - name: 🔨 Build del agente
         run: |
-          # Rebuild si cambió código del agente O si se forzó manualmente
           CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep "^agent/" || true)
           if [[ "${{ inputs.force_rebuild }}" == "true" ]] || [[ -n "$CHANGED" ]]; then
-            echo "🔨 Cambios detectados en agent/ (o rebuild forzado) — rebuildeando imagen..."
+            echo "🔨 Cambios en agent/ o rebuild forzado — rebuildeando imagen..."
             docker compose build --no-cache edge_agent
           else
             echo "⏩ Sin cambios en agent/ — build incremental (usa caché)"
@@ -70,7 +74,7 @@ jobs:
 
           echo ""
           echo "=== Health check Agente ==="
-          curl -sf http://localhost:8080/health && echo "✅ Agente OK" || echo "⚠️ Agente no responde (puede seguir iniciando)"
+          curl -sf http://localhost:8080/health && echo "✅ Agente OK" || echo "⚠️ Agente no responde aún (puede seguir iniciando)"
 
           echo ""
           echo "=== Health check InfluxDB ==="
