@@ -11,16 +11,10 @@ on:
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: 'Forzar rebuild de la imagen Docker (incluso sin cambios en agent/)'
+        description: 'Forzar rebuild de la imagen Docker'
         required: false
         default: 'false'
         type: boolean
-
-# Usar Git Bash en Windows (viene incluido con Git for Windows)
-# Permite usar comandos bash/unix en un runner Windows 11 sin instalar nada extra
-defaults:
-  run:
-    shell: bash
 
 jobs:
   deploy:
@@ -33,66 +27,74 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 🔑 Generar archivo .env desde GitHub Secrets
+        shell: pwsh
         run: |
-          # printf es más portable que heredoc en Git Bash / Windows
-          printf 'TENANT_SLUG=%s\n' "${{ secrets.TENANT_SLUG }}" > .env
-          printf 'SITE_ID=%s\n' "${{ secrets.SITE_ID }}" >> .env
-          printf 'DEVICE_TOKEN=%s\n' "${{ secrets.DEVICE_TOKEN }}" >> .env
-          printf 'CLOUD_API_URL=%s\n' "${{ secrets.CLOUD_API_URL }}" >> .env
-          printf 'INFLUX_ADMIN_USER=%s\n' "${{ secrets.INFLUX_ADMIN_USER }}" >> .env
-          printf 'INFLUX_ADMIN_PASSWORD=%s\n' "${{ secrets.INFLUX_ADMIN_PASSWORD }}" >> .env
-          printf 'INFLUX_ORG=%s\n' "${{ secrets.INFLUX_ORG }}" >> .env
-          printf 'INFLUX_BUCKET=%s\n' "${{ secrets.INFLUX_BUCKET }}" >> .env
-          printf 'INFLUX_TOKEN=%s\n' "${{ secrets.INFLUX_TOKEN }}" >> .env
-          printf 'AGENT_VERSION=%s\n' "${{ github.sha }}" >> .env
-          echo "✅ .env generado (valores ocultos por seguridad)"
+          $content = @"
+          TENANT_SLUG=${{ secrets.TENANT_SLUG }}
+          SITE_ID=${{ secrets.SITE_ID }}
+          DEVICE_TOKEN=${{ secrets.DEVICE_TOKEN }}
+          CLOUD_API_URL=${{ secrets.CLOUD_API_URL }}
+          INFLUX_ADMIN_USER=${{ secrets.INFLUX_ADMIN_USER }}
+          INFLUX_ADMIN_PASSWORD=${{ secrets.INFLUX_ADMIN_PASSWORD }}
+          INFLUX_ORG=${{ secrets.INFLUX_ORG }}
+          INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}
+          INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
+          AGENT_VERSION=${{ github.sha }}
+          "@
+          $content.Trim() | Out-File -FilePath ".env" -Encoding utf8 -NoNewline
+          Write-Host "✅ .env generado correctamente"
 
-      - name: 🐳 Pull de imágenes base (actualizaciones de seguridad)
+      - name: 🐳 Pull de imágenes base
+        shell: pwsh
         run: docker compose pull mosquitto_edge influxdb_edge
 
       - name: 🔨 Build del agente
+        shell: pwsh
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep "^agent/" || true)
-          if [[ "${{ inputs.force_rebuild }}" == "true" ]] || [[ -n "$CHANGED" ]]; then
-            echo "🔨 Cambios en agent/ o rebuild forzado — rebuildeando imagen..."
+          $changed = git diff --name-only HEAD~1 HEAD 2>$null | Where-Object { $_ -match "^agent/" }
+          if ("${{ inputs.force_rebuild }}" -eq "true" -or $changed) {
+            Write-Host "🔨 Rebuildeando imagen del agente..."
             docker compose build --no-cache edge_agent
-          else
-            echo "⏩ Sin cambios en agent/ — build incremental (usa caché)"
+          } else {
+            Write-Host "⏩ Sin cambios en agent/ — build incremental"
             docker compose build edge_agent
-          fi
+          }
 
       - name: 🚀 Deploy (zero-downtime)
+        shell: pwsh
         run: |
           docker compose up -d --remove-orphans
-          echo "✅ Stack levantado"
+          Write-Host "✅ Stack levantado"
 
-      - name: 🔍 Verificar salud de los servicios (esperar 20s)
+      - name: 🔍 Verificar salud de los servicios
+        shell: pwsh
         run: |
-          sleep 20
-          echo "=== Estado de los contenedores ==="
+          Start-Sleep 20
+          Write-Host "=== Estado de los contenedores ==="
           docker compose ps
-
-          echo ""
-          echo "=== Health check Agente ==="
-          curl -sf http://localhost:8080/health && echo "✅ Agente OK" || echo "⚠️ Agente no responde aún (puede seguir iniciando)"
-
-          echo ""
-          echo "=== Health check InfluxDB ==="
-          curl -sf http://localhost:8087/ping && echo "✅ InfluxDB OK" || echo "⚠️ InfluxDB no responde"
+          Write-Host ""
+          Write-Host "=== Health check Agente ==="
+          try { Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null; Write-Host "✅ Agente OK" } catch { Write-Host "⚠️ Agente no responde aún" }
+          Write-Host ""
+          Write-Host "=== Health check InfluxDB ==="
+          try { Invoke-WebRequest -Uri http://localhost:8087/ping -UseBasicParsing | Out-Null; Write-Host "✅ InfluxDB OK" } catch { Write-Host "⚠️ InfluxDB no responde" }
 
       - name: 🧹 Limpiar imágenes Docker antiguas
+        shell: pwsh
         run: docker image prune -f
 
       - name: 📋 Resumen del deploy
         if: always()
+        shell: pwsh
         run: |
-          echo "=================================================="
-          echo "  AIM SCADA Edge — Resumen de Deploy"
-          echo "=================================================="
-          echo "  Commit  : ${{ github.sha }}"
-          echo "  Autor   : ${{ github.actor }}"
-          echo "  Rama    : ${{ github.ref_name }}"
-          echo "  Ambiente: Minera-Sofia"
-          echo "  Fecha   : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "=================================================="
+          Write-Host "=================================================="
+          Write-Host "  AIM SCADA Edge — Resumen de Deploy"
+          Write-Host "=================================================="
+          Write-Host "  Commit  : ${{ github.sha }}"
+          Write-Host "  Autor   : ${{ github.actor }}"
+          Write-Host "  Rama    : ${{ github.ref_name }}"
+          Write-Host "  Ambiente: Minera-Sofia"
+          Write-Host "  Fecha   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+          Write-Host "=================================================="
           docker compose ps
+
