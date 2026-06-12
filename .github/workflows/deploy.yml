@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: 📥 Checkout código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # Necesario para que HEAD~1 exista en git diff
 
       - name: 🔑 Generar archivo .env desde GitHub Secrets
         shell: powershell
@@ -51,8 +53,15 @@ jobs:
       - name: 🔨 Build del agente
         shell: powershell
         run: |
-          $changed = git diff --name-only HEAD~1 HEAD 2>$null | Where-Object { $_ -match "^agent/" }
-          if ("${{ inputs.force_rebuild }}" -eq "true" -or $changed) {
+          $forceRebuild = "${{ inputs.force_rebuild }}" -eq "true"
+          $changed = $false
+          try {
+            $diffOutput = git diff --name-only HEAD~1 HEAD 2>$null
+            $changed = ($diffOutput | Where-Object { $_ -match "^agent/" }).Count -gt 0
+          } catch {
+            Write-Host "⚠️ No se pudo calcular diff — asumiendo sin cambios"
+          }
+          if ($forceRebuild -or $changed) {
             Write-Host "🔨 Rebuildeando imagen del agente..."
             docker compose build --no-cache edge_agent
           } else {
