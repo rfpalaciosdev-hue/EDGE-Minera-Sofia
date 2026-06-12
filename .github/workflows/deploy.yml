@@ -1,4 +1,4 @@
-name: 🏭 Deploy Edge Agent
+name: Deploy Edge Agent
 
 on:
   push:
@@ -18,17 +18,17 @@ on:
 
 jobs:
   deploy:
-    name: 🚀 Deploy to Edge Node — Minera-Sofia
+    name: Deploy to Edge Node - Minera-Sofia
     runs-on: self-hosted
     environment: Minera-Sofia
 
     steps:
-      - name: 📥 Checkout código
+      - name: Checkout codigo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2   # Necesario para que HEAD~1 exista en git diff
+          fetch-depth: 2
 
-      - name: 🔑 Generar archivo .env desde GitHub Secrets
+      - name: Generar archivo .env desde GitHub Secrets
         shell: powershell
         run: |
           $lines = @(
@@ -44,13 +44,13 @@ jobs:
             "AGENT_VERSION=${{ github.sha }}"
           )
           Set-Content -Path ".env" -Value $lines -Encoding utf8
-          Write-Host "✅ .env generado correctamente"
+          Write-Host "OK: .env generado correctamente"
 
-      - name: 🐳 Pull de imágenes base
+      - name: Pull de imagenes base
         shell: powershell
         run: docker compose pull mosquitto_edge influxdb_edge
 
-      - name: 🔨 Build del agente
+      - name: Build del agente
         shell: powershell
         run: |
           $forceRebuild = "${{ inputs.force_rebuild }}" -eq "true"
@@ -59,36 +59,46 @@ jobs:
             $diffOutput = git diff --name-only HEAD~1 HEAD 2>$null
             $changed = ($diffOutput | Where-Object { $_ -match "^agent/" }).Count -gt 0
           } catch {
-            Write-Host "⚠️ No se pudo calcular diff — asumiendo sin cambios"
+            Write-Host "WARN: No se pudo calcular diff, asumiendo sin cambios"
           }
           if ($forceRebuild -or $changed) {
-            Write-Host "🔨 Rebuildeando imagen del agente..."
+            Write-Host "INFO: Rebuildeando imagen del agente..."
             docker compose build --no-cache edge_agent
           } else {
-            Write-Host "⏩ Sin cambios — build incremental"
+            Write-Host "INFO: Sin cambios, build incremental"
             docker compose build edge_agent
           }
 
-      - name: 🚀 Deploy (zero-downtime)
+      - name: Deploy zero-downtime
         shell: powershell
         run: |
           docker compose up -d --remove-orphans
-          Write-Host "✅ Stack levantado"
+          Write-Host "OK: Stack levantado"
 
-      - name: 🔍 Verificar salud de los servicios
+      - name: Verificar salud de los servicios
         shell: powershell
         run: |
           Start-Sleep 20
           Write-Host "=== Estado de los contenedores ==="
           docker compose ps
-          try { Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null; Write-Host "✅ Agente OK" } catch { Write-Host "⚠️ Agente no responde aún" }
-          try { Invoke-WebRequest -Uri http://localhost:8087/ping -UseBasicParsing | Out-Null; Write-Host "✅ InfluxDB OK" } catch { Write-Host "⚠️ InfluxDB no responde" }
+          try {
+            Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null
+            Write-Host "OK: Agente responde"
+          } catch {
+            Write-Host "WARN: Agente no responde aun"
+          }
+          try {
+            Invoke-WebRequest -Uri http://localhost:8087/ping -UseBasicParsing | Out-Null
+            Write-Host "OK: InfluxDB responde"
+          } catch {
+            Write-Host "WARN: InfluxDB no responde"
+          }
 
-      - name: 🧹 Limpiar imágenes Docker antiguas
+      - name: Limpiar imagenes Docker antiguas
         shell: powershell
         run: docker image prune -f
 
-      - name: 📋 Resumen del deploy
+      - name: Resumen del deploy
         if: always()
         shell: powershell
         run: |
