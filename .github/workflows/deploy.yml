@@ -97,4 +97,3 @@ jobs:
           Write-Host "  Fecha   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
           Write-Host "=================================================="
           docker compose ps
-
