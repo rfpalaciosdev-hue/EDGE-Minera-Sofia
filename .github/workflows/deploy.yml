@@ -27,73 +27,69 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 🔑 Generar archivo .env desde GitHub Secrets
-        shell: pwsh
+        shell: powershell
         run: |
-          $content = @"
-          TENANT_SLUG=${{ secrets.TENANT_SLUG }}
-          SITE_ID=${{ secrets.SITE_ID }}
-          DEVICE_TOKEN=${{ secrets.DEVICE_TOKEN }}
-          CLOUD_API_URL=${{ secrets.CLOUD_API_URL }}
-          INFLUX_ADMIN_USER=${{ secrets.INFLUX_ADMIN_USER }}
-          INFLUX_ADMIN_PASSWORD=${{ secrets.INFLUX_ADMIN_PASSWORD }}
-          INFLUX_ORG=${{ secrets.INFLUX_ORG }}
-          INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}
-          INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
-          AGENT_VERSION=${{ github.sha }}
-          "@
-          $content.Trim() | Out-File -FilePath ".env" -Encoding utf8 -NoNewline
+          $lines = @(
+            "TENANT_SLUG=${{ secrets.TENANT_SLUG }}",
+            "SITE_ID=${{ secrets.SITE_ID }}",
+            "DEVICE_TOKEN=${{ secrets.DEVICE_TOKEN }}",
+            "CLOUD_API_URL=${{ secrets.CLOUD_API_URL }}",
+            "INFLUX_ADMIN_USER=${{ secrets.INFLUX_ADMIN_USER }}",
+            "INFLUX_ADMIN_PASSWORD=${{ secrets.INFLUX_ADMIN_PASSWORD }}",
+            "INFLUX_ORG=${{ secrets.INFLUX_ORG }}",
+            "INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}",
+            "INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}",
+            "AGENT_VERSION=${{ github.sha }}"
+          )
+          Set-Content -Path ".env" -Value $lines -Encoding utf8
           Write-Host "✅ .env generado correctamente"
 
       - name: 🐳 Pull de imágenes base
-        shell: pwsh
+        shell: powershell
         run: docker compose pull mosquitto_edge influxdb_edge
 
       - name: 🔨 Build del agente
-        shell: pwsh
+        shell: powershell
         run: |
           $changed = git diff --name-only HEAD~1 HEAD 2>$null | Where-Object { $_ -match "^agent/" }
           if ("${{ inputs.force_rebuild }}" -eq "true" -or $changed) {
             Write-Host "🔨 Rebuildeando imagen del agente..."
             docker compose build --no-cache edge_agent
           } else {
-            Write-Host "⏩ Sin cambios en agent/ — build incremental"
+            Write-Host "⏩ Sin cambios — build incremental"
             docker compose build edge_agent
           }
 
       - name: 🚀 Deploy (zero-downtime)
-        shell: pwsh
+        shell: powershell
         run: |
           docker compose up -d --remove-orphans
           Write-Host "✅ Stack levantado"
 
       - name: 🔍 Verificar salud de los servicios
-        shell: pwsh
+        shell: powershell
         run: |
           Start-Sleep 20
           Write-Host "=== Estado de los contenedores ==="
           docker compose ps
-          Write-Host ""
-          Write-Host "=== Health check Agente ==="
           try { Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Out-Null; Write-Host "✅ Agente OK" } catch { Write-Host "⚠️ Agente no responde aún" }
-          Write-Host ""
-          Write-Host "=== Health check InfluxDB ==="
           try { Invoke-WebRequest -Uri http://localhost:8087/ping -UseBasicParsing | Out-Null; Write-Host "✅ InfluxDB OK" } catch { Write-Host "⚠️ InfluxDB no responde" }
 
       - name: 🧹 Limpiar imágenes Docker antiguas
-        shell: pwsh
+        shell: powershell
         run: docker image prune -f
 
       - name: 📋 Resumen del deploy
         if: always()
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "=================================================="
-          Write-Host "  AIM SCADA Edge — Resumen de Deploy"
+          Write-Host "  AIM SCADA Edge - Resumen de Deploy"
           Write-Host "=================================================="
           Write-Host "  Commit  : ${{ github.sha }}"
           Write-Host "  Autor   : ${{ github.actor }}"
           Write-Host "  Rama    : ${{ github.ref_name }}"
           Write-Host "  Ambiente: Minera-Sofia"
-          Write-Host "  Fecha   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+          Write-Host "  Fecha   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
           Write-Host "=================================================="
           docker compose ps
