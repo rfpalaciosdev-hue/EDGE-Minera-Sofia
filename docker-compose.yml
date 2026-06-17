@@ -72,6 +72,9 @@ services:
       - EDGE_INFLUX_TOKEN=${INFLUX_TOKEN}
       - EDGE_INFLUX_ORG=${INFLUX_ORG}
       - EDGE_INFLUX_BUCKET=${INFLUX_BUCKET}
+      # Tópicos MQTT a suscribir además del tenant/site. Default "#" (todo).
+      # Sobreescribir en GitHub Secret si se quiere restringir: "linea1/#,plc2/#"
+      - MQTT_EXTRA_TOPICS=${MQTT_EXTRA_TOPICS:-#}
     volumes:
       - agent_state:/app/state
     depends_on:

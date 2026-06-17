@@ -15,6 +15,11 @@ EDGE_INFLUX_TOKEN = os.getenv("EDGE_INFLUX_TOKEN", "edge-secret-token-12345")
 EDGE_INFLUX_ORG = os.getenv("EDGE_INFLUX_ORG", "edge_planta")
 EDGE_INFLUX_BUCKET = os.getenv("EDGE_INFLUX_BUCKET", "edge_buffer")
 
+# === Tópicos MQTT adicionales de la planta (raw, separados por coma) ===
+# Por defecto "#" = suscribir a TODO (cualquier PLC/SCADA funciona sin configuración).
+# Sobreescribir con tópicos específicos si se quiere restringir: "linea1/#,plc2/#"
+MQTT_EXTRA_TOPICS = os.getenv("MQTT_EXTRA_TOPICS", "#")
+
 # === Configuración Cloud (Nube) ===
 CLOUD_API_URL = os.getenv("CLOUD_API_URL")
 DEVICE_TOKEN = os.getenv("DEVICE_TOKEN")
@@ -44,6 +49,13 @@ def on_connect(client, userdata, flags, rc):
         # Suscribir al topic genérico SCADA (ej: scada/planta1/tablero1/energia)
         client.subscribe("scada/#")
         print(f"📡 Suscripto a local: {topic} y scada/#")
+        # Suscribir a tópicos adicionales de planta (raw) si están configurados
+        if MQTT_EXTRA_TOPICS:
+            for extra in MQTT_EXTRA_TOPICS.split(","):
+                extra = extra.strip()
+                if extra:
+                    client.subscribe(extra)
+                    print(f"📡 Suscripto a tópico extra de planta: {extra}")
     else:
         print(f"❌ Error MQTT: {rc}")
 
@@ -88,9 +100,16 @@ def on_message(client, userdata, msg):
     last_mqtt_msg_time = time.time()
     try:
         parts = msg.topic.split('/')
-        payload = json.loads(msg.payload)
         now_epoch = time.time()
-        print(f"📥 MENSAJE RECIBIDO: {msg.topic} | Payload: {payload}")
+
+        # --- Intentar parsear el payload (JSON o valor crudo) ---
+        raw_payload_str = msg.payload.decode("utf-8").strip()
+        try:
+            payload = json.loads(raw_payload_str)
+        except (json.JSONDecodeError, ValueError):
+            payload = None  # No es JSON; puede ser valor numérico crudo
+
+        print(f"📥 MENSAJE RECIBIDO: {msg.topic} | Payload: {raw_payload_str[:80]}")
         
         # Lista de (tag_path, sensor_name, value, timestamp, is_online, area, machine) a procesar
         data_points = []
@@ -98,6 +117,7 @@ def on_message(client, userdata, msg):
         # Procesamiento para tópico formato ESP32: scada/planta1/tablero1/energia
         if parts[0] == "scada":
             if len(parts) < 4: return
+            if not isinstance(payload, dict): return
             area = parts[1]
             machine = parts[2]
             sensor_group = parts[3]
@@ -115,12 +135,11 @@ def on_message(client, userdata, msg):
                     continue
                     
                 sensor_name = f"{sensor_group}_{key}"
-                # Ajustar el tag_path para mantener unicidad en métricas
                 tag_path = f"{msg.topic}/{key}"
                 data_points.append((tag_path, sensor_name, val_float, ts, is_online, area, machine))
                 
-        # Procesamiento estándar original: tenant/site/area/machine/sensor
-        elif len(parts) >= 5:
+        # Procesamiento estándar AIM: tenant/site/area/machine/sensor (payload JSON)
+        elif len(parts) >= 5 and isinstance(payload, dict):
             area = parts[2]
             machine = parts[3]
             sensor_name = parts[4]
@@ -136,6 +155,33 @@ def on_message(client, userdata, msg):
                 return
             
             data_points.append((msg.topic, sensor_name, val_float, ts, is_online, area, machine))
+
+        # Procesamiento PLANTA RAW: area/machine/sensor o area/machine/sub/sensor
+        # Payload = valor numérico crudo (ej: "240.09" o "57.6")
+        # Ejemplo: linea1/analizador/Tension_L1N = 240.09
+        # Ejemplo: linea1/molinos-martillo/MM1/corriente = 0
+        elif len(parts) >= 3:
+            try:
+                val_float = float(raw_payload_str)
+            except (ValueError, TypeError):
+                return  # No es numérico ni JSON — ignorar
+
+            area = parts[0]
+            if len(parts) == 3:
+                # area/machine/sensor
+                machine = parts[1]
+                sensor_name = parts[2]
+            elif len(parts) == 4:
+                # area/machine/sub/sensor → machine = "machine_sub"
+                machine = f"{parts[1]}_{parts[2]}"
+                sensor_name = parts[3]
+            else:
+                # Más de 4 niveles: todo el medio como machine, último como sensor
+                machine = "_".join(parts[1:-1])
+                sensor_name = parts[-1]
+
+            data_points.append((msg.topic, sensor_name, val_float, None, True, area, machine))
+
         else:
             return
             
