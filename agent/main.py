@@ -76,6 +76,7 @@ def get_deadband_threshold(sensor_name: str, current_value: float, tag_path: str
     Calcula el umbral de 'ruido' (Banda Muerta) y el tiempo máximo admisible (Heartbeat).
     Prioriza las configuraciones guardadas manualmente; de lo contrario, usa un Default global limpio.
     """
+    print("hola mundo")
     if tag_path and tag_path in custom_deadbands:
         cfg = custom_deadbands[tag_path]
         pct = cfg.get("pct")
