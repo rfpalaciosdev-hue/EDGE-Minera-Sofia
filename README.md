@@ -82,3 +82,4 @@ El agente expone una interfaz web en `http://localhost:8080` (o `http://<IP-plan
 - Ver sensores detectados en tiempo real
 - Ajustar filtros deadband por sensor
 - Configurar thresholds globales (sync, offline, purga)
+probando deployd
