@@ -87,12 +87,12 @@ def get_deadband_threshold(sensor_name: str, current_value: float, tag_path: str
         elif min_abs is not None and pct is None:
             return float(min_abs), heartbeat
         else:
-            pct_val = float(pct) if pct is not None else 0.01
-            abs_val = float(min_abs) if min_abs is not None else 0.5
+            pct_val = float(pct) if pct is not None else 0.0
+            abs_val = float(min_abs) if min_abs is not None else 0.0
             return max(abs(current_value * pct_val), abs_val), heartbeat
 
-    # Tolerancia Global por defecto (1% relativo o mínimo 0.5 unidades, con Heartbeat de 15s)
-    return max(abs(current_value * 0.01), 0.5), 15.0
+    # Por defecto no aplicamos filtro de tolerancia (pasa toda la data)
+    return 0.0, 15.0
 
 def on_message(client, userdata, msg):
     """Recibe el paquete del simulador (PLC) o ESP32 y lo tira al Búfer (InfluxDB Local)"""
@@ -344,7 +344,7 @@ def load_global_settings():
                 return json.load(f)
         except Exception:
             pass
-    return {"offline_threshold": 15.0, "purge_days": 7.0}
+    return {"offline_threshold": 600.0, "purge_days": 7.0}
 
 def save_global_settings(data):
     with open(GLOBAL_SETTINGS_FILE, "w") as f:
@@ -749,7 +749,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="input-group" style="width: 250px;">
                     <label>Tiempo Límite Caída (Segundos)</label>
-                    <input type="number" step="0.1" id="global_offline" value="15.0" />
+                    <input type="number" step="0.1" id="global_offline" value="600.0" />
                 </div>
                 <div class="input-group" style="width: 250px;">
                     <label>Tiempo Purga y Grabado (Días)</label>
