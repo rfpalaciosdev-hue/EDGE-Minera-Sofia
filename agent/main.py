@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 from flask import Flask, request, jsonify
+from health_report import HealthReporter, post_with_health
 
 # === Configuración Local (Edge) ===
 EDGE_MQTT_HOST = os.getenv("EDGE_MQTT_HOST", "localhost")
@@ -271,6 +272,9 @@ mqtt_client = mqtt.Client(client_id="edge_agent_store")
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
+# Health only: actual broker connection, independent of sensor traffic.
+health_reporter = HealthReporter(EDGE_INFLUX_URL, mqtt_client.is_connected)
+
 def run_mqtt():
     while True:
         try:
@@ -473,7 +477,7 @@ def run_forwarder():
                 }
                 print(f"⚡ Notificando reconexión instantánea de {len(reconnect_items)} tags al backend...")
                 try:
-                    r = session.post(CLOUD_API_URL, json=reconnect_body, headers=headers, timeout=10)
+                    r = post_with_health(health_reporter, session, CLOUD_API_URL, json=reconnect_body, headers=headers, timeout=10)
                     if r.status_code == 200:
                         print(f"✅ Reconexión notificada OK ({len(reconnect_items)} tags online)")
                     else:
@@ -510,7 +514,18 @@ def run_forwarder():
                 |> limit(n: {BATCH_LIMIT})
             '''
             
-            tables = query_api.query(query)
+            try:
+                tables = query_api.query(query)
+            except Exception:
+                # Health heartbeat only: never confirms samples or advances the cursor.
+                post_with_health(health_reporter, session, CLOUD_API_URL, json={
+                    "tenant_slug": TENANT_SLUG, "site_id": SITE_ID, "data": [],
+                    "status": {
+                        "is_online": True,
+                        "scada_connected": (time.time() - last_mqtt_msg_time) < 30.0,
+                    },
+                }, headers=headers, timeout=10)
+                raise
             
             if not tables:
                 batch_payload = []
@@ -554,7 +569,7 @@ def run_forwarder():
             else:
                 print(f"💓 Enviando Heartbeat (is_online=True, scada_connected={scada_connected}). Sin datos nuevos.")
             
-            resp = session.post(CLOUD_API_URL, json=body, headers=headers, timeout=10)
+            resp = post_with_health(health_reporter, session, CLOUD_API_URL, json=body, headers=headers, timeout=10)
             if resp.status_code == 200:
                 if max_time:
                     print(f"☁️ Enviado OK a Nube. Avanzando puntero a {max_time}")
@@ -1254,6 +1269,10 @@ def run_flask():
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
+    try:
+        threading.Thread(target=health_reporter.run, daemon=True).start()
+    except Exception:
+        print("⚠️ Monitor de salud no disponible; la telemetría continúa")
     t_store = threading.Thread(target=run_mqtt, daemon=True)
     t_forward = threading.Thread(target=run_forwarder, daemon=True)
     t_flask = threading.Thread(target=run_flask, daemon=True)
