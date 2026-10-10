@@ -1,6 +1,6 @@
 # AIM SCADA Edge Agent
 
-Stack de telemetría industrial para nodos Edge (planta). Implementa el patrón **Store & Forward**: captura datos MQTT del SCADA local, los almacena en un buffer InfluxDB y los reenvía a la plataforma cloud de forma robusta.
+Stack de telemetría industrial para nodos Edge (planta). Implementa el patrón **Store & Forward**: captura datos MQTT del SCADA local, los almacena en un buffer InfluxDB y los reenvía a la plataforma cloud de forma robusta:).
 
 ## Componentes
 
