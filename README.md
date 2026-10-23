@@ -10,7 +10,7 @@ Stack de telemetría industrial para nodos Edge (planta). Implementa el patrón 
 | `influxdb_edge` | influxdb:2.7-alpine | 8087 | Buffer de datos (2d retención) |
 | `edge_agent` | Python 3.11 custom | 8080 | Agente Store & Forward + UI admin |
 
-## Tópicos MQTT que escucha el agente
+## Tópico MQTT que escucha el agente
 
 ### Formato 1 — Estándar AIM (PLC / Simulador / OPC-UA bridge)
 ```
@@ -83,3 +83,37 @@ El agente expone una interfaz web en `http://localhost:8080` (o `http://<IP-plan
 - Ajustar filtros deadband por sensor
 - Configurar thresholds globales (sync, offline, purga)
 probando deployd
+
+## Almacenamiento de logs
+
+Los tres servicios usan logs Docker `json-file` con rotación: `max-size=10m`
+y `max-file=3`, aproximadamente 30 MB por contenedor y 90 MB entre los tres.
+Se quitaron las impresiones por mensaje MQTT y el mensaje de depuración por
+sensor; se conservan los mensajes de arranque, sincronización y errores.
+
+Este límite corresponde a los logs Docker de stdout/stderr. No limita los
+volúmenes de datos, imágenes, caché de builds ni archivos de log que un servicio
+escriba dentro de sus volúmenes. La retención de InfluxDB es independiente.
+El monitor de salud muestra datos TSM + WAL, no el espacio libre del disco ni
+los logs Docker.
+
+La configuración se aplica al recrear los contenedores. Cuando el equipo esté
+accesible y se haya comprobado el espacio libre, desde el directorio del proyecto:
+
+```sh
+docker compose up -d --build
+```
+
+La recreación puede interrumpir brevemente los servicios y conserva los volúmenes
+nombrados. Cambiar estos archivos no limita los contenedores ya existentes ni
+libera espacio por sí solo. No hace falta borrar volúmenes ni cambiar retención.
+
+Para comprobar la configuración aplicada (también desde PowerShell):
+
+```sh
+docker inspect --format '{{.Name}} {{json .HostConfig.LogConfig}}' aim_edge_agent aim_influxdb_edge aim_mosquitto_edge
+```
+
+Cada servicio debe informar `json-file`, `max-size: 10m` y `max-file: 3`.
+Este cambio previene crecimiento ilimitado de estos logs; no confirma que los
+logs hayan causado una caída ni recupera automáticamente una PC inaccesible.

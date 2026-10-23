@@ -6,10 +6,19 @@ version: "3.8"
 # NO hardcodear valores aquí. Usar .env (generado en el workflow).
 # ==============================================================================
 
+# Logs Docker: aproximadamente 30 MB por servicio (3 archivos de 10 MB).
+# La retención de InfluxDB no controla estos archivos.
+x-logging: &edge_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   mosquitto_edge:
     image: eclipse-mosquitto:2.0
     container_name: aim_mosquitto_edge
+    logging: *edge_logging
     ports:
       - "1883:1883"
     volumes:
@@ -29,6 +38,7 @@ services:
   influxdb_edge:
     image: influxdb:2.7-alpine
     container_name: aim_influxdb_edge
+    logging: *edge_logging
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_ADMIN_USER}
@@ -57,6 +67,7 @@ services:
       dockerfile: Dockerfile
     image: aim-edge-agent:${AGENT_VERSION:-latest}
     container_name: aim_edge_agent
+    logging: *edge_logging
     ports:
       - "8080:8080"
     environment:
