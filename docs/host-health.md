@@ -76,8 +76,11 @@ El workflow `Diagnostico Edge (solo lectura)` puede ejecutarse desde Actions
 cuando no se dispone de acceso a la PC, siempre que el runner esté conectado.
 Publica únicamente estados predeterminados de los tres servicios y un resumen
 acotado de conectividad: DNS, HTTP, antigüedad del ACK, cantidad de errores y
-coincidencia con el sitio esperado. No extrae logs, identificadores de la
-configuración ni credenciales. Ejecuta una consulta local de salud y un GET
+coincidencia con el sitio esperado. Clasifica los errores del log local dentro
+de categorías fijas (timeout, TLS, DNS, JSON o headers inválidos, HTTP, conexión),
+y publica sólo categorías y cantidades. Nunca publica líneas de log, mensajes de
+excepciones, identificadores de la configuración o credenciales.
+Ejecuta una consulta local de salud y un GET
 al ping público de la nube desde el contenedor, usando el mismo cliente HTTP.
 El ping comprueba conectividad; no valida el token ni confirma ingesta durable.
 No reinicia servicios, no modifica cursores y no envía lotes o heartbeats.

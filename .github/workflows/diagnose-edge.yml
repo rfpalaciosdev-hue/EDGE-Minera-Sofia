@@ -26,4 +26,6 @@ jobs:
           clean: false
       - name: Leer estado y conexion del agente sin reiniciar servicios
         shell: powershell
-        run: ./scripts/diagnostics/Read-EdgeDiagnostics.ps1 -ExpectedSite LINEA_1 -ExpectedTenant minera-sofia
+        run: |
+          ./tests/windows/Test-EdgeDiagnosticSummary.ps1
+          ./scripts/diagnostics/Read-EdgeDiagnostics.ps1 -ExpectedSite LINEA_1 -ExpectedTenant minera-sofia
