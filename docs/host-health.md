@@ -28,15 +28,27 @@ $healthDir.Replace('\', '/')
 docker compose up -d --build
 ```
 
-El instalador usa la cuenta actual: S4U para usuarios normales (sin guardar
-contraseñas) y ServiceAccount para las cuentas integradas de Windows. Esa cuenta
-necesita permiso para registrar su tarea y acceso al contexto Docker local.
+El instalador usa la cuenta actual: Interactive para usuarios normales (sin
+guardar contraseñas) y ServiceAccount para las cuentas integradas de Windows.
+La tarea Interactive se ejecuta mientras esa cuenta mantiene la sesión iniciada,
+coherente con Docker Desktop. Bloquear la pantalla conserva la sesión; cerrarla
+impide ejecutar esa tarea. Esa cuenta necesita permiso para registrar su tarea
+y acceso al contexto Docker local.
 No se cambian permisos, no se solicitan credenciales y no se expone una API Docker
-por TCP. Una política de Windows puede impedir el registro; el paso del workflow
-debe revisarse si falla. Docker Desktop debe estar funcionando bajo la cuenta
+por TCP. Antes del registro se obtiene una muestra inmediata. Si Windows deniega
+el registro, se muestra una advertencia explícita y el deploy continúa; esa
+muestra puntual no confirma monitoreo periódico y caduca a los 180 s. Otros
+fallos de instalación también generan una advertencia de Actions sin impedir
+las verificaciones posteriores de los servicios. Docker Desktop debe estar funcionando bajo la cuenta
 correspondiente; una tarea no inicia Docker Desktop ni garantiza su disponibilidad
 después de cerrar sesión. Se rechazan contextos remotos para no mezclar métricas
 de distintas máquinas.
+
+Para una instalación manual con permisos suficientes se puede seleccionar
+`-UserLogonType S4U`. No se eleva automáticamente el runner ni se modifican
+políticas o permisos de tareas existentes. Si Interactive también recibe
+`0x80070005`, revisar con el administrador los permisos de registro y el dueño
+de la tarea `AinData-EdgeHealth-Minera-Sofia`; no asumir que el monitor se instaló.
 
 Para comprobar la instalación:
 
@@ -158,6 +170,7 @@ python3 -m unittest discover -s tests -v
 
 ```powershell
 ./tests/windows/Test-EdgeHealth.ps1
+./tests/windows/Test-EdgeHealthInstall.ps1
 ```
 
 Las pruebas de PowerShell no requieren Pester: analizan ambos scripts y ejecutan

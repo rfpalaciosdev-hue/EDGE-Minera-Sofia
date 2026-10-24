@@ -32,7 +32,9 @@ jobs:
 
       - name: Validar monitor de salud sin servicios externos
         shell: powershell
-        run: ./tests/windows/Test-EdgeHealth.ps1
+        run: |
+          ./tests/windows/Test-EdgeHealth.ps1
+          ./tests/windows/Test-EdgeHealthInstall.ps1
 
       - name: Generar archivo .env desde GitHub Secrets
         shell: powershell
@@ -86,6 +88,7 @@ jobs:
           Write-Host "OK: Stack levantado"
 
       - name: Instalar monitor de salud de Windows
+        continue-on-error: true
         shell: powershell
         run: |
           ./scripts/windows/Install-EdgeHealthTask.ps1
