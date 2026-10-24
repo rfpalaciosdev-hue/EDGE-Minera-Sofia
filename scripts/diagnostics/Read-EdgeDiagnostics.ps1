@@ -33,8 +33,7 @@ function Get-ForwardingErrorSummary([string]$Logs) {
             elseif ($line -match 'NameResolution|getaddrinfo|name or service not known') { 'dns' }
             elseif ($line -match 'SSLError|SSL:|CERTIFICATE_VERIFY|certificate verify') { 'tls' }
             elseif ($line -match 'No connection adapters|Invalid URL|No scheme supplied') { 'invalid_url' }
-            elseif ($line -match 'Error 4[0-9][0-9]') { 'http_4xx' }
-            elseif ($line -match 'Error 5[0-9][0-9]') { 'http_5xx' }
+            elseif ($line -match 'Error ([45][0-9][0-9])') { 'http_' + $Matches[1] }
             elseif ($line -match 'ConnectionError|Connection aborted|Connection reset|RemoteDisconnected|Max retries') { 'connection' }
             else { 'unclassified' }
         if (-not $counts.ContainsKey($kind)) { $counts[$kind] = 0 }

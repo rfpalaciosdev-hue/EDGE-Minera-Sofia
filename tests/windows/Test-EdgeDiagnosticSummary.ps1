@@ -17,7 +17,7 @@ sensor payload PRIVATE
 Detalle: unknown PRIVATE
 '@
 $summary = Get-ForwardingErrorSummary $fixture
-foreach ($kind in @('timeout', 'invalid_header', 'invalid_json', 'dns', 'tls', 'http_4xx', 'http_5xx', 'unclassified')) {
+foreach ($kind in @('timeout', 'invalid_header', 'invalid_json', 'dns', 'tls', 'http_403', 'http_503', 'unclassified')) {
     if ($summary.forwarding_error_summary.counts[$kind] -ne 1) { throw "Incorrect classification: $kind" }
 }
 $json = $summary | ConvertTo-Json -Compress -Depth 5
