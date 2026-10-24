@@ -496,6 +496,8 @@ def run_forwarder():
             # Cuando el batch devuelve exactamente BATCH_LIMIT registros, hay más por enviar:
             # aumentamos el límite a 5000 para ponernos al día rápidamente.
             BATCH_LIMIT = 5000
+            # Flux limita por tabla/serie. post_with_health fracciona el total
+            # reunido en pedidos HTTP acotados y exige ACK de todos sus paquetes.
             
             if start_range == "-1h":
                 time_filter = ""

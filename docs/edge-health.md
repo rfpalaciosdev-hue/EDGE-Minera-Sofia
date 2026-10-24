@@ -34,6 +34,21 @@ resets existentes, watchdog ni purga. Sus riesgos preexistentes siguen pendiente
 
 No se envían tokens, configuración ni payloads industriales dentro de la salud.
 
+## Envíos HTTP acotados
+
+Cada POST de telemetría se divide en paquetes de hasta **500 registros y 256 KiB**
+de JSON, incluyendo salud y caracteres escapados. El límite Flux de 5000 filas
+es por tabla, y no limita el total reunido de todas las series. Esto evita que
+un backfill genere un solo pedido excesivo y reciba HTTP 413.
+
+El cursor del lote original sólo avanza cuando todos sus paquetes reciben HTTP
+200. Si un paquete falla, se detiene el envío y se conserva el cursor; al
+reintentar pueden reenviarse paquetes ya confirmados, que el receptor debe
+deduplicar. No se fracciona el avance de cursor por timestamp: los registros
+con la misma fecha permanecen pendientes si algún paquete no fue confirmado.
+Los riesgos previos de selección por series, auto-reset de cursor y purga
+continúan independientes de este límite HTTP.
+
 ## Estado y despliegue
 
 Los cambios se validaron localmente sin ejecutar el agente contra producción.

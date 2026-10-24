@@ -13,20 +13,25 @@ from health_report import HealthReporter, post_with_health
 
 
 class ForwardingHealthTests(unittest.TestCase):
-    def run_iteration(self, *, query_error=False, status=200, reconnect=False, empty=False):
+    def run_iteration(self, *, query_error=False, status=200, reconnect=False, empty=False, count=1, responses=None):
         source = (Path(__file__).resolve().parents[1] / "agent" / "main.py").read_text()
         function = next(node for node in ast.parse(source).body
                         if isinstance(node, ast.FunctionDef) and node.name == "run_forwarder")
         query_api = MagicMock()
-        record = MagicMock()
-        record.values = {"tag_path": "plant/tag", "is_online": "True"}
-        record.get_time.return_value = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
-        record.get_value.return_value = 10
-        query_api.query.return_value = [] if empty else [SimpleNamespace(records=[record])]
+        records = []
+        for index in range(count):
+            record = MagicMock()
+            record.values = {"tag_path": f"plant/tag{index}", "is_online": "True"}
+            record.get_time.return_value = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+            record.get_value.return_value = 10
+            records.append(record)
+        query_api.query.return_value = [] if empty else [SimpleNamespace(records=records)]
         if query_error:
             query_api.query.side_effect = RuntimeError("Influx unavailable")
         session = MagicMock()
         session.post.return_value.status_code = status
+        if responses is not None:
+            session.post.side_effect = responses
         reporter = HealthReporter("http://influx", lambda: True, get=MagicMock(side_effect=TimeoutError))
         reporter.collect()
         reconnect_queue = queue.Queue()
@@ -82,3 +87,23 @@ class ForwardingHealthTests(unittest.TestCase):
         for call in session.post.call_args_list:
             self.assertIn("edge_health", call.kwargs["json"])
         state["set_last_sync"].assert_not_called()
+
+    def test_split_batch_advances_cursor_only_after_every_chunk_ack(self):
+        with patch('health_report.MAX_RECORDS_PER_REQUEST', 1):
+            state, session = self.run_iteration(count=2)
+        self.assertEqual(session.post.call_count, 2)
+        state['set_last_sync'].assert_called_once_with('2026-09-26T12:00:00+00:00')
+
+    def test_failed_second_chunk_keeps_cursor_including_equal_timestamps(self):
+        responses = [SimpleNamespace(status_code=200), SimpleNamespace(status_code=413)]
+        with patch('health_report.MAX_RECORDS_PER_REQUEST', 1):
+            state, session = self.run_iteration(count=2, responses=responses)
+        self.assertEqual(session.post.call_count, 2)
+        state['set_last_sync'].assert_not_called()
+
+    def test_timeout_after_partial_ack_keeps_cursor(self):
+        responses = [SimpleNamespace(status_code=200), TimeoutError()]
+        with patch('health_report.MAX_RECORDS_PER_REQUEST', 1):
+            state, session = self.run_iteration(count=2, responses=responses)
+        self.assertEqual(session.post.call_count, 2)
+        state['set_last_sync'].assert_not_called()

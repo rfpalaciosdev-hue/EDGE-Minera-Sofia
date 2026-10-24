@@ -1,11 +1,17 @@
-"""Small read-only health sampler. No cursor, retention or telemetry dependencies."""
+"""Cached read-only health and bounded HTTP requests; no cursor or retention writes."""
 import copy
+import json as json_module
 import math
 import os
 import threading
 import time
 from datetime import datetime, timezone
 from resource_report import read_resources
+
+# Influx limit(n) applies per table, so a query can produce a much larger total.
+# Bound the actual HTTP body, including health metadata and JSON escaping.
+MAX_REQUEST_BYTES = 256 * 1024
+MAX_RECORDS_PER_REQUEST = 500
 
 
 def utc_now():
@@ -95,27 +101,74 @@ class HealthReporter:
                 self.forwarding["consecutive_errors"] += 1
 
 
+def iter_request_bodies(body, *, max_bytes=None, max_records=None):
+    max_bytes = MAX_REQUEST_BYTES if max_bytes is None else max_bytes
+    max_records = MAX_RECORDS_PER_REQUEST if max_records is None else max_records
+    if max_bytes < 1 or max_records < 1:
+        raise ValueError("HTTP batch limits must be positive")
+    records = body.get("data")
+    if not isinstance(records, list) or not records:
+        request = dict(body)
+        if len(json_module.dumps(request, allow_nan=False).encode("utf-8")) > max_bytes:
+            request.pop("edge_health", None)
+        if len(json_module.dumps(request, allow_nan=False).encode("utf-8")) > max_bytes:
+            raise ValueError("HTTP request metadata exceeds the byte limit")
+        yield request
+        return
+    envelope = {**body, "data": []}
+    envelope_bytes = len(json_module.dumps(envelope, allow_nan=False).encode("utf-8"))
+    if envelope_bytes > max_bytes and "edge_health" in envelope:
+        # Optional monitoring must never prevent a telemetry request.
+        envelope.pop("edge_health")
+        envelope_bytes = len(json_module.dumps(envelope, allow_nan=False).encode("utf-8"))
+    chunk = []
+    size = envelope_bytes
+    for record in records:
+        record_bytes = len(json_module.dumps(record, allow_nan=False).encode("utf-8"))
+        if envelope_bytes + record_bytes > max_bytes and "edge_health" in envelope:
+            envelope.pop("edge_health")
+            reduced_bytes = len(json_module.dumps(envelope, allow_nan=False).encode("utf-8"))
+            size -= envelope_bytes - reduced_bytes
+            envelope_bytes = reduced_bytes
+        if envelope_bytes + record_bytes > max_bytes:
+            raise ValueError("A telemetry record exceeds the HTTP request byte limit; cursor retained")
+        separator_bytes = 2 if chunk else 0  # Default JSON list separator: ', '.
+        if chunk and (len(chunk) >= max_records or size + separator_bytes + record_bytes > max_bytes):
+            yield {**envelope, "data": chunk}
+            chunk = []
+            size = envelope_bytes
+            separator_bytes = 0
+        chunk.append(record)
+        size += separator_bytes + record_bytes
+    if chunk:
+        yield {**envelope, "data": chunk}
+
+
 def post_with_health(reporter, session, url, *, json, **kwargs):
     # Never let collection/serialization/accounting failures prevent a send.
     body = dict(json)
     try:
         snapshot = reporter.snapshot()
         if snapshot is not None:
-            import json as json_module
             json_module.dumps(snapshot, allow_nan=False)
             body["edge_health"] = snapshot
     except Exception:
         pass
     try:
-        response = session.post(url, json=body, **kwargs)
+        for request_body in iter_request_bodies(body):
+            response = session.post(url, json=request_body, **kwargs)
+            try:
+                reporter.record_send(response.status_code)
+            except Exception:
+                pass
+            if response.status_code != 200:
+                # The caller must not advance its cursor after a partial ACK.
+                return response
     except Exception:
         try:
             reporter.record_send(None)
         except Exception:
             pass
         raise
-    try:
-        reporter.record_send(response.status_code)
-    except Exception:
-        pass
+    # Return success only after every part of the original batch was confirmed.
     return response
