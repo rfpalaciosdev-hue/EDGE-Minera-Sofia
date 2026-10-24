@@ -70,6 +70,20 @@ Para retirar la tarea, sin tocar la DB ni los volúmenes:
 Unregister-ScheduledTask -TaskName AinData-EdgeHealth-Minera-Sofia -Confirm:$false
 ```
 
+### Diagnóstico mediante el runner
+
+El workflow `Diagnostico Edge (solo lectura)` puede ejecutarse desde Actions
+cuando no se dispone de acceso a la PC, siempre que el runner esté conectado.
+Publica únicamente estados predeterminados de los tres servicios y un resumen
+acotado de conectividad: DNS, HTTP, antigüedad del ACK, cantidad de errores y
+coincidencia con el sitio esperado. No extrae logs, identificadores de la
+configuración ni credenciales. Ejecuta una consulta local de salud y un GET
+al ping público de la nube desde el contenedor, usando el mismo cliente HTTP.
+El ping comprueba conectividad; no valida el token ni confirma ingesta durable.
+No reinicia servicios, no modifica cursores y no envía lotes o heartbeats.
+Se activa al publicar cambios de sus propios scripts/workflow o manualmente.
+Sus rutas no disparan el workflow de despliegue del stack.
+
 ## Qué se mide
 
 - **Windows:** CPU agregada, tiempo desde el arranque del sistema, RAM total,
