@@ -1170,6 +1170,18 @@ HTML_TEMPLATE = """
 def index():
     return HTML_TEMPLATE
 
+@app.route("/health", methods=["GET"])
+def health():
+    # Liveness only: unavailable resource metrics must not restart telemetry.
+    return jsonify({"status": "ok"})
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    snapshot = health_reporter.snapshot()
+    if snapshot is None:
+        return jsonify({"status": "initializing"}), 503
+    return jsonify(snapshot)
+
 @app.route("/api/settings", methods=["GET", "POST"])
 def api_settings():
     if request.method == "POST":

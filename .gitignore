@@ -6,6 +6,7 @@
 # Estado persistente del agente (vive en Docker Named Volume, no en el repo)
 agent_state/
 agent_state_dev/
+host-health/
 
 # Datos de InfluxDB locales (ídem)
 influxdb_data/

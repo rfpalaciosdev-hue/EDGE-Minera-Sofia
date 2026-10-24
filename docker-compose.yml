@@ -86,8 +86,13 @@ services:
       # Tópicos MQTT a suscribir además del tenant/site. Default "#" (todo).
       # Sobreescribir en GitHub Secret si se quiere restringir: "linea1/#,plc2/#"
       - MQTT_EXTRA_TOPICS=${MQTT_EXTRA_TOPICS:-#}
+      - EDGE_HOST_HEALTH_FILE=/host-health/host-health.json
     volumes:
       - agent_state:/app/state
+      - type: bind
+        source: ${EDGE_HEALTH_DIR:-./host-health}
+        target: /host-health
+        read_only: true
     depends_on:
       mosquitto_edge:
         condition: service_healthy

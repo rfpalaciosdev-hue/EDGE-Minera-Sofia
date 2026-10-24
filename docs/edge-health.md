@@ -1,7 +1,10 @@
 # Reporte mínimo de salud para AinData
 
 Se añadió un bloque opcional `edge_health` a los POST existentes del agente.
-No agrega endpoints, dependencias ni servicios al compose.
+El reporte original no agrega dependencias ni servicios al compose.
+La extensión de recursos de Windows/Docker agrega un recolector en el host,
+un montaje de solo lectura y endpoints locales de consulta; ver
+[salud del host y contrato para la plataforma](host-health.md).
 
 ## Métricas
 
@@ -12,6 +15,7 @@ No agrega endpoints, dependencias ni servicios al compose.
   ni capacidad del disco ni tamaño garantizado de un bucket.
 - Tiempo activo del proceso.
 - Último HTTP, último ACK 200 (datos o heartbeat) y errores consecutivos de envío.
+- Bloques opcionales `host` y `docker`: CPU, RAM, discos y almacenamiento sin DB.
 
 El recolector lee Influx en un hilo independiente cada 30 s, con timeouts de 2 s.
 Los envíos adjuntan una copia de la última medición; no consultan Influx por cada
@@ -32,8 +36,9 @@ No se envían tokens, configuración ni payloads industriales dentro de la salud
 
 ## Estado y despliegue
 
-Cambios preparados y probados en el checkout local. **No desplegados ni enviados
-a la rama main.** No se ejecutó el agente contra producción durante las pruebas.
+Los cambios se validaron localmente sin ejecutar el agente contra producción.
+El estado efectivo del despliegue debe comprobarse en GitHub Actions y en la
+PC Windows; un push por sí solo no confirma que el recolector esté funcionando.
 
 Para visualizar las métricas debe estar desplegada primero la versión compatible
 de AinData, con la migración master `i3j4k5l6m7n8`, el receptor de `edge_health`

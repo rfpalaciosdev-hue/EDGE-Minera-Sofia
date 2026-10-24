@@ -1,9 +1,11 @@
 """Small read-only health sampler. No cursor, retention or telemetry dependencies."""
 import copy
 import math
+import os
 import threading
 import time
 from datetime import datetime, timezone
+from resource_report import read_resources
 
 
 def utc_now():
@@ -26,13 +28,14 @@ def influx_bytes(metrics):
 
 
 class HealthReporter:
-    def __init__(self, influx_url, mqtt_connected, get=None):
+    def __init__(self, influx_url, mqtt_connected, get=None, resource_path=None):
         if get is None:
             import requests
             get = requests.get
         self.get = get
         self.influx_url = influx_url.rstrip("/")
         self.mqtt_connected = mqtt_connected
+        self.resource_path = resource_path or os.getenv("EDGE_HOST_HEALTH_FILE", "/host-health/host-health.json")
         self.started = time.monotonic()
         self.lock = threading.Lock()
         self.report = None
@@ -56,6 +59,10 @@ class HealthReporter:
             mqtt = "connected" if self.mqtt_connected() else "disconnected"
         except Exception:
             mqtt = "unknown"
+        try:
+            resources = read_resources(self.resource_path)
+        except Exception:
+            resources = read_resources("/nonexistent-host-health")
         with self.lock:
             self.report = {
                 "schema_version": 1, "collected_at": utc_now(),
@@ -63,6 +70,7 @@ class HealthReporter:
                 "resources": {"influx_data_bytes": size},
                 "services": {"mqtt_connection": mqtt, "influx_probe": probe},
                 "forwarding": dict(self.forwarding),
+                **resources,
             }
 
     def run(self):

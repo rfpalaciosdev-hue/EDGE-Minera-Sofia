@@ -86,6 +86,11 @@ probando deployd
 
 ## Almacenamiento de logs
 
+Para CPU, RAM, discos de Windows y uso de volúmenes/logs Docker, ver
+[monitor del host y contrato para la administración de tenants](docs/host-health.md).
+El reporte se consulta localmente en `http://localhost:8080/api/health` y se
+adjunta al `edge_health` existente para su integración en la plataforma.
+
 Los tres servicios usan logs Docker `json-file` con rotación: `max-size=10m`
 y `max-file=3`, aproximadamente 30 MB por contenedor y 90 MB entre los tres.
 Se quitaron las impresiones por mensaje MQTT y el mensaje de depuración por
@@ -94,8 +99,9 @@ sensor; se conservan los mensajes de arranque, sincronización y errores.
 Este límite corresponde a los logs Docker de stdout/stderr. No limita los
 volúmenes de datos, imágenes, caché de builds ni archivos de log que un servicio
 escriba dentro de sus volúmenes. La retención de InfluxDB es independiente.
-El monitor de salud muestra datos TSM + WAL, no el espacio libre del disco ni
-los logs Docker.
+La métrica `influx_data_bytes` muestra datos TSM + WAL. Los bloques adicionales
+`host` y `docker` informan los recursos y almacenamiento cuando el recolector
+de Windows está instalado; no se deducen de esa métrica de InfluxDB.
 
 La configuración se aplica al recrear los contenedores. Cuando el equipo esté
 accesible y se haya comprobado el espacio libre, desde el directorio del proyecto:

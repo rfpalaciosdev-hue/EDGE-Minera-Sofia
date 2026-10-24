@@ -8,6 +8,8 @@ on:
       - 'agent/**'
       - 'docker-compose.yml'
       - 'mosquitto/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       force_rebuild:
@@ -28,9 +30,16 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Validar monitor de salud sin servicios externos
+        shell: powershell
+        run: ./tests/windows/Test-EdgeHealth.ps1
+
       - name: Generar archivo .env desde GitHub Secrets
         shell: powershell
         run: |
+          $healthDir = Join-Path $env:LOCALAPPDATA 'AinData\EdgeHealth'
+          New-Item -ItemType Directory -Path $healthDir -Force | Out-Null
+          $healthMount = $healthDir.Replace('\', '/')
           $lines = @(
             "TENANT_SLUG=${{ secrets.TENANT_SLUG }}",
             "SITE_ID=${{ secrets.SITE_ID }}",
@@ -41,7 +50,8 @@ jobs:
             "INFLUX_ORG=${{ secrets.INFLUX_ORG }}",
             "INFLUX_BUCKET=${{ secrets.INFLUX_BUCKET }}",
             "INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}",
-            "AGENT_VERSION=${{ github.sha }}"
+            "AGENT_VERSION=${{ github.sha }}",
+            "EDGE_HEALTH_DIR=$healthMount"
           )
           Set-Content -Path ".env" -Value $lines -Encoding utf8
           Write-Host "OK: .env generado correctamente"
@@ -74,6 +84,11 @@ jobs:
         run: |
           docker compose up -d --remove-orphans
           Write-Host "OK: Stack levantado"
+
+      - name: Instalar monitor de salud de Windows
+        shell: powershell
+        run: |
+          ./scripts/windows/Install-EdgeHealthTask.ps1
 
       - name: Verificar salud de los servicios
         shell: powershell
