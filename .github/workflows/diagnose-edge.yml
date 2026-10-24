@@ -7,6 +7,10 @@ on:
       - 'scripts/diagnostics/**'
       - '.github/workflows/diagnose-edge.yml'
   workflow_dispatch:
+  workflow_run:
+    workflows: ['Deploy Edge Agent']
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -17,6 +21,7 @@ concurrency:
 
 jobs:
   diagnose:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: self-hosted
     environment: Minera-Sofia
     timeout-minutes: 5

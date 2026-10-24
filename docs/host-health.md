@@ -84,7 +84,8 @@ Ejecuta una consulta local de salud y un GET
 al ping público de la nube desde el contenedor, usando el mismo cliente HTTP.
 El ping comprueba conectividad; no valida el token ni confirma ingesta durable.
 No reinicia servicios, no modifica cursores y no envía lotes o heartbeats.
-Se activa al publicar cambios de sus propios scripts/workflow o manualmente.
+Se activa después de un deploy exitoso, al publicar cambios de sus propios
+scripts/workflow o manualmente.
 Sus rutas no disparan el workflow de despliegue del stack.
 
 ## Qué se mide
