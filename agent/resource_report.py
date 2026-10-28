@@ -63,7 +63,7 @@ def read_resources(path, now=None):
     except (OSError, ValueError, TypeError):
         pass
 
-    host, raw_host = section(payload.get("host"), now, 180)
+    host, raw_host = section(payload.get("host"), now, 600)
     host["cpu_percent"] = number(raw_host.get("cpu_percent"), 100)
     host["uptime_seconds"] = number(raw_host.get("uptime_seconds"), integer=True)
     memory = object_or_empty(raw_host.get("memory"))
@@ -86,7 +86,7 @@ def read_resources(path, now=None):
                                      or any(value is None for disk in host["disks"] for value in disk.values())):
         host["status"] = "partial"
 
-    docker, raw_docker = section(payload.get("docker"), now, 180)
+    docker, raw_docker = section(payload.get("docker"), now, 600)
     docker["containers"] = []
     rows = raw_docker.get("containers", [])
     by_name = {row.get("name"): row for row in rows if isinstance(row, dict)

@@ -8,9 +8,18 @@ Esta implementación del Edge no modifica ni despliega la plataforma cloud.
 ## Instalación y despliegue
 
 El workflow registra `AinData-EdgeHealth-Minera-Sofia` en el Programador de tareas
-después de levantar los servicios. Ejecuta una muestra cada minuto y refresca
+después de levantar los servicios. Ejecuta una muestra cada cinco minutos y refresca
 almacenamiento cada cinco minutos. La tarea y el script instalado están fuera del
 checkout, por lo que sobreviven al siguiente `actions/checkout`.
+
+La tarea inicia `wscript.exe //B //NoLogo` con el lanzador instalado
+`Run-EdgeHealthHidden.vbs`. Este crea PowerShell oculto desde el inicio, sin
+destellos de consola; el modo batch suprime cuadros de error del lanzador.
+Docker se ejecuta con `CreateNoWindow` y salida redirigida. El lanzador espera
+al recolector y propaga su código de salida para conservar el control de
+duración y evitar ejecuciones superpuestas. Requiere Windows Script Host con
+VBScript habilitado; si la política del equipo lo bloquea, se debe comprobar
+el resultado en el Programador de tareas y la fecha de `host-health.json`.
 
 La carpeta predeterminada es `%LOCALAPPDATA%\AinData\EdgeHealth`, bajo la cuenta
 del runner. El workflow escribe su ruta absoluta en `EDGE_HEALTH_DIR` del `.env`.
@@ -37,7 +46,7 @@ y acceso al contexto Docker local.
 No se cambian permisos, no se solicitan credenciales y no se expone una API Docker
 por TCP. Antes del registro se obtiene una muestra inmediata. Si Windows deniega
 el registro, se muestra una advertencia explícita y el deploy continúa; esa
-muestra puntual no confirma monitoreo periódico y caduca a los 180 s. Otros
+muestra puntual no confirma monitoreo periódico y caduca a los 600 s. Otros
 fallos de instalación también generan una advertencia de Actions sin impedir
 las verificaciones posteriores de los servicios. Docker Desktop debe estar funcionando bajo la cuenta
 correspondiente; una tarea no inicia Docker Desktop ni garantiza su disponibilidad
@@ -154,7 +163,7 @@ El agente lee el archivo en su hilo de salud cada 30 s y valida nombres, tipos,
 valores finitos y campos admitidos. El JSON se reemplaza de forma atómica;
 su tamaño máximo admitido es 256 KiB. Nunca se reenvía el archivo sin filtrar.
 
-Windows y Docker caducan a los **180 segundos**; almacenamiento a los **900
+Windows y Docker caducan a los **600 segundos**; almacenamiento a los **900
 segundos**. Cada bloque tiene su propia fecha. Datos caducados conservan su fecha,
 pero sus mediciones se vuelven `null` y el estado cambia a `stale`. Fechas sin
 zona horaria o con más de 30 s en el futuro no se consideran actuales.

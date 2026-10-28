@@ -51,8 +51,16 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(result["docker"]["storage"]["status"], "ok")
         self.assertNotIn("aim_influxdb_data", result["docker"]["storage"]["volumes"])
 
+    def test_sample_remains_fresh_between_five_minute_collections(self):
+        previous = (self.now - timedelta(seconds=330)).isoformat()
+        self.payload["host"]["collected_at"] = previous
+        self.payload["docker"]["collected_at"] = previous
+        result = self.read()
+        self.assertEqual(result["host"]["status"], "ok")
+        self.assertEqual(result["docker"]["status"], "ok")
+
     def test_stale_host_and_docker_keep_storage_independent(self):
-        old = (self.now - timedelta(seconds=181)).isoformat()
+        old = (self.now - timedelta(seconds=601)).isoformat()
         self.payload["host"]["collected_at"] = old
         self.payload["docker"]["collected_at"] = old
         result = self.read()
